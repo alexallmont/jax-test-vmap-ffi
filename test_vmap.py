@@ -165,3 +165,7 @@ def test_vmap_deep():
     cpp_add = _add_broadcast_all(x3, y3)
     assert(cpp_add.shape == (11, 7, 5))
     assert(jnp.allclose(cpp_add, expected))
+
+    cpp_add_vmap = _add_broadcast_all_vmap(x3, y3)
+    assert(cpp_add_vmap.shape == (11, 7, 5))
+    assert(jnp.allclose(cpp_add_vmap, expected))
