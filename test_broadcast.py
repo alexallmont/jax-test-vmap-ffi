@@ -26,8 +26,22 @@ def add(shape_a: tuple, shape_b: tuple, method: str):
         impl = jax.vmap(impl)
     return impl(a, b)
 
+
+def dummy_cpp_add_vmap(shape_a: tuple, shape_b: tuple):
+    """
+    Simulate calling convention of above add method without doing actual add
+
+    Used to understand exceptional vmap cases, as we don't want to actually call JAX's add method because it has its
+    own internal constraints on behaviour, so this gives an idea of what one may do with their own FFI.
+    """
+    a = jnp.ones(shape_a)
+    b = jnp.ones(shape_b)
+    impl = jax.vmap(lambda x, _: x)
+    return impl(a, b)
+
+
 @pytest.mark.parametrize("method", ["np", "jnp", "vmap"])
-def test_add(method):
+def test_broadcast(method):
     assert(add((1,), (1,), method).shape == (1,))
     assert(add((1, 1, 1), (1,), method).shape == (1, 1, 1))
 
@@ -74,6 +88,14 @@ def test_add(method):
             add((2, 3, 4), (2,), method)
     else:
         add((2, 3, 4), (2,), method)
+
+        # Exceptional vmap allowing 2 in leftmost is because it looks like it's only considering first dimension
+        dummy_cpp_add_vmap((2, 3), (2, 3))
+        dummy_cpp_add_vmap((2, 3), (2, 7))
+        dummy_cpp_add_vmap((2, 3, 4), (2, 3, 7))
+        dummy_cpp_add_vmap((2, 3, 4), (2, 5, 7)) # Particularly interesting, second dimension completely ignored
+        with pytest.raises(Exception):
+            dummy_cpp_add_vmap((2, 3, 4), (3, 5, 7)) # Confirm that the first dimension is significant
 
     with pytest.raises(Exception):
         add((2, 3, 4), (3,), method)
