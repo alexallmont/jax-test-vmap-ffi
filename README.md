@@ -12,4 +12,4 @@ Docs to follow imminently. TODO: sharding and OMP. For now, test with:
     cmake ..
     make
     cd ..
-    PYTHONPATH=build:src pytest
+    pytest

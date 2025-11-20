@@ -26,6 +26,21 @@ def _add_sequential(x, y):
     return call(x, y)
 
 
+def _all_array_shapes_same(first_array: jnp.array, *other_arrays: jnp.array):
+    for array in other_arrays:
+        if array.shape != first_array.shape:
+            return False
+    return True
+
+
+def roughpy_broadcast(*arrays: jnp.array):
+    if _all_array_shapes_same(*arrays):
+        return arrays
+    else:
+        broadcast_shape = jnp.broadcast_shapes(*[array.shape for array in arrays])
+        return [jnp.broadcast_to(array, broadcast_shape) for array in arrays]
+
+
 def _ones(n):
     return jnp.ones(n, dtype=jnp.float32)
 
@@ -169,3 +184,41 @@ def test_vmap_deep():
     cpp_add_vmap = _add_broadcast_all_vmap(x3, y3)
     assert(cpp_add_vmap.shape == (11, 7, 5))
     assert(jnp.allclose(cpp_add_vmap, expected))
+
+
+if __name__ == "__main__":
+    my_add = _add_broadcast_all
+    my_add_vmap = _add_broadcast_all_vmap
+
+    a1 = jnp.ones((2))
+    a3 = jnp.ones((4, 3, 2))
+
+    # OK: allow same dims, i.e. non-vmap version has same constraints as vmap
+    my_add(a1, a1)
+    my_add_vmap(a1, a1)
+
+    # Not OK: both non-vmap rejects in C++, vmap rejects in JAX
+    #my_add(a1, a3) # Fails in C++ expecting all to be same size
+    #my_add_vmap(a1, a3) # Fails in JAX
+
+    # OK: provide helper method to resize arrays to be compatible
+    my_add(*roughpy_broadcast(a1, a3))
+    my_add_vmap(*roughpy_broadcast(a1, a3))
+
+    # FIXME 1 discuss: this is for arrays - i.e. all dims brought in line - but for roughpy_jax
+    # the last element (the 'atom' or 'core dim') needs to be ignored. If this concept is sound, the dims
+    # could be determined in roughpy_broadcast (broadcast but ignore last) and then the C++ code can
+    # relax strictness on last constraint.
+
+    # FIXME 2: I see now how this will not work with vmap if JAX rejects on last elem, testing here
+    # here b3 and c3 are valid in all but last elem/atom/core dim.
+    b3 = jnp.ones((4, 3, 5))
+    c3 = jnp.ones((4, 3, 2)) # AHA! It's OK... vmap only seems to care about about first dim
+    ##c3 = jnp.ones((5, 5, 2)) # breaking case, first dim mismatch
+    ##c3 = jnp.ones((4, 5, 2)) # but this is allowed but invalid so must add code to rejected in C++
+    #my_add(b3, c3)
+    #my_add_vmap(b3, c3)
+
+    # So to pick up above, C++ code could reject as in FIXME 1 but say we have N dims of D, then number of
+    # compute steps C = D1 * D2 * ... * D(N-1), and for each the last D depends on size of data at that
+    # point.

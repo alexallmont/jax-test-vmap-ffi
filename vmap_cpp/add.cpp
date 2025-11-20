@@ -1,6 +1,7 @@
 #include <cmath>
 #include <complex>
 #include <cstdint>
+#include <iostream>
 #include <type_traits>
 #include <utility>
 
@@ -11,17 +12,27 @@
 namespace nb = nanobind;
 namespace ffi = xla::ffi;
 
+// Uncomment for print debugging in internals
+#define DEBUG_PRINT
+
+std::ostream& operator<<(std::ostream& os, const ffi::Buffer<ffi::F32>::Dimensions& dims) {
+  os << '(';
+  size_t n_dims = dims.size();
+  for (size_t i = 0, n = dims.size(); i != n; ++i) {
+    os << dims[i];
+    if (i != n - 1) {
+      os << ", ";
+    }
+  }
+  os << ')';
+  return os;
+}
+
 std::pair<int64_t, int64_t> get_dims(const ffi::Buffer<ffi::F32>& buffer) {
   auto dims = buffer.dimensions();
   if (dims.size() == 0) {
     return std::make_pair(0, 0);
   }
-
-  std::cout << "get_dims size = " << dims.size() << '\n';
-  for (auto dim : dims) {
-    std::cout << dim << ' ';
-  }
-  std::cout << std::endl;
 
   return std::make_pair(buffer.element_count(), dims.back());
 }
@@ -33,19 +44,36 @@ void compute_add(int64_t size, const float* x, const float* y, float* z) {
 }
 
 ffi::Error add_impl(ffi::Buffer<ffi::F32> x, ffi::Buffer<ffi::F32> y, ffi::ResultBuffer<ffi::F32> result) {
-  auto [x_total_size, x_last_dim] = get_dims(x);
-  if (x_last_dim == 0) {
-    return ffi::Error::InvalidArgument("x input must be an array");
+#ifdef DEBUG_PRINT
+  std::cout << "x dims = " << x.dimensions() << std::endl;
+  std::cout << "x size_bytes = " << x.size_bytes() << std::endl;
+  std::cout << "y dims = " << y.dimensions() << std::endl;
+  std::cout << "y size_bytes = " << y.size_bytes() << std::endl;
+#endif // DEBUG_PRINT
+
+  auto [result_total_size, result_last_dim] = get_dims(*result);
+  if (result_last_dim == 0) {
+    return ffi::Error::InvalidArgument("result output must be an array");
   }
 
-  if (!(y.dimensions() == x.dimensions())) {
-    return ffi::Error::InvalidArgument("y must have same dimensions as x");
+  // FIXME temporarily disabled to demonstrate new code at bottom of test_vmap.py
+  // If concept sound, this equality should be replaced with all but last dim.
+#if 0
+  if (!(result->dimensions() == x.dimensions())) {
+    return ffi::Error::InvalidArgument("x must have same dimensions as result");
   }
 
-  for (int64_t n = 0; n < x_total_size; n += x_last_dim) {
+  if (!(result->dimensions() == y.dimensions())) {
+    return ffi::Error::InvalidArgument("y must have same dimensions as result");
+  }
+#endif
+
+  for (int64_t n = 0; n < result_total_size; n += result_last_dim) {
+#ifdef DEBUG_PRINT
     std::cout << "compute add from n = " << n << '\n';
+#endif // DEBUG_PRINT
     compute_add(
-      x_last_dim,
+      result_last_dim,
       &(x.typed_data()[n]),
       &(y.typed_data()[n]),
       &(result->typed_data()[n])

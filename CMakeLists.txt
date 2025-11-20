@@ -11,9 +11,9 @@ message(STATUS "XLA include directory: ${XLA_DIR}")
 
 find_package(nanobind CONFIG REQUIRED)
 
-nanobind_add_module("_add" NB_STATIC "src/vmap_cpp/add.cpp")
+nanobind_add_module("_add" NB_STATIC "vmap_cpp/add.cpp")
 target_include_directories("_add" PUBLIC ${XLA_DIR})
 set_target_properties("_add" PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY  ${CMAKE_CURRENT_LIST_DIR}/src/vmap_cpp
+    LIBRARY_OUTPUT_DIRECTORY  ${CMAKE_CURRENT_LIST_DIR}/vmap_cpp
     LIBRARY_OUTPUT_NAME "_add"
 )
